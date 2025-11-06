@@ -8,24 +8,23 @@
 #include <time.h>
 #include <signal.h>
 
-// Global variables initalzed
+// Global variables initialized
 double cpu_usage;
 double usedMem, totalMem, memoryPercent;
 int numProcess;
 pthread_mutex_t lock;
 
 // By default interval is set to 1 second
-// Logging is initalized as false
+// Logging is initialized as false (0)
 int interval = 1, logging = 0;
 
 volatile sig_atomic_t running = 1;
 
 FILE* loggingFile = NULL;
 
-// Handle exit gracefully by turning running to 0 in case of SIGNINT
+// Handle exit gracefully by turning running to 0 in case of SIGINT
 void handle_sigint(){
     running = 0;
-
 }
 
 // Reads CPU time stats from /proc/stat 
@@ -77,12 +76,12 @@ double getCpuUsage() {
 }
 
 
-// 
-// Sample Memory Read
-//MemTotal:       196137884 kB
-//MemAvailable:        169652440 kB
-// Argumets:
-// used: pointer thats stores used memory
+// Sample /proc/meminfo read:
+// MemTotal:       196137884 kB
+// MemAvailable:        169652440 kB
+
+// Arguments:
+// used: pointer that stores used memory
 // total: pointer to store the total memory
 // percent: pointer that stores percentage for display
 
@@ -116,7 +115,8 @@ void getMemoryUsage(double *used, double *total, double *percent){
 
     fclose(file);
 
-    // mem_total and mem_avail are divided by 1024^2 to convert kB to gB
+    // conversion from kb to gb
+    // mem_total and mem_avail are divided by 1024^2 to convert kB to GB
     double total_mem_in_gb = mem_total / (1024.0 * 1024.0);
     double used_gb = (mem_total - mem_avail) / (1024.0 * 1024.0);
     double mem_used_percentage = 100.0 * ((double)(mem_total - mem_avail) / (double)mem_total);
@@ -126,12 +126,11 @@ void getMemoryUsage(double *used, double *total, double *percent){
     *percent = mem_used_percentage;
 
 }
-// Iterates through /proc directory and counts entries that start with digit
-// ensure that its a process
-//
+
+// Iterates through /proc directory and counts entries that start with a digit
+// to ensure that it's a process
 int getCountProcesses(){
-    // Implementation follows
-    // reading from a directory https://c-for-dummies.com/blog/?p=3246
+    // Implementation follows reading from a directory https://c-for-dummies.com/blog/?p=3246
 
     DIR *folder = opendir("/proc");
 
@@ -143,6 +142,8 @@ int getCountProcesses(){
     struct dirent *entry;
     int count = 0;
 
+    // iterates over each entry in dir and checks if the first char is a digit
+    // assumes that if the first char is digit, rest of the name is numeric too
     while ( (entry=readdir(folder))){
         if (entry != NULL){
             if (isdigit(entry->d_name[0])){
@@ -156,6 +157,7 @@ int getCountProcesses(){
     return count;
 }
 
+// thread function to update cpu usage 
 void *cpu_thread(void *arg){
     while (running)
     {
@@ -163,7 +165,7 @@ void *cpu_thread(void *arg){
         cpu_usage = getCpuUsage();
         pthread_mutex_unlock(&lock);
 
-        // sleeping is added so instantaneous values in sucession won't result the 
+        // sleeping is added so instantaneous values in succession won't result in the 
         // numerator of the function to be 0 (therefore result 0)
         sleep(interval);
         
@@ -172,6 +174,7 @@ void *cpu_thread(void *arg){
     
 }
 
+// thread function to update process count 
 void *process_thread(void *arg){
     while (running)
     {
@@ -186,6 +189,7 @@ void *process_thread(void *arg){
     
 }
 
+// thread function to update memory usage
 void *memory_thread(void *arg){
     while (running)
     {
@@ -201,8 +205,11 @@ void *memory_thread(void *arg){
 
 int main(int argc, char *argv[]) {
 
+    // register handle_sigint to run when user sends SIGINT (Ctrl+C)
     signal(SIGINT, handle_sigint);
 
+    // variables to display time_string incase of logging
+    //https://www.tutorialspoint.com/c_standard_library/c_function_localtime.htm
     time_t now;
     char time_string[32];
     struct tm *local_time;
@@ -234,12 +241,13 @@ int main(int argc, char *argv[]) {
         }
         else{
             printf("Not a valid flag\n");
+            printf("Usage: %s [--interval <seconds>] [--logging]\n", argv[0]);
             return 0;
         }
     }
     }
 
-    // Initalization of thread, and lock
+    // Initialization of thread and lock
     pthread_t cpuThread, processThread, memThread;
     pthread_mutex_init(&lock, NULL);
     // Creation of threads
@@ -263,7 +271,6 @@ int main(int argc, char *argv[]) {
             local_time = localtime(&now);
 
             strftime(time_string, sizeof(time_string), "[%Y-%m-%d %H:%M:%S]", local_time);
-
             fprintf(loggingFile, "%s CPU: %.2f%%, Memory: %.2f GB/%.2f GB, Processes: %d\n", 
                 time_string ,cpu_usage, usedMem, totalMem, numProcess);
             fflush(loggingFile);
@@ -282,7 +289,7 @@ int main(int argc, char *argv[]) {
 
     // Exiting gracefully when CTRL+C is pressed
 
-     // wait for threads to join
+    // wait for threads to join
     pthread_join(cpuThread, NULL);
     pthread_join(processThread, NULL);
     pthread_join(memThread, NULL);
