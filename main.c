@@ -214,6 +214,12 @@ int main(int argc, char *argv[]) {
         if (strcmp(argv[i], "--interval") == 0){
             if (i + 1 < argc){
                 interval = atoi(argv[++i]);
+
+                // case that interval is not valid
+                if (interval < 1){
+                    printf("Interval must be greater than 1\n");
+                    return 0;
+                }
             }else{
                 printf("Not a valid interval\n");
                 return 0;
